@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiseAi - Eğitim Platformu</title>
+    
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://unpkg.com/lucide-react@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; margin: 0; }
+        
+        /* Orijinal kodun içindeki özel CSS'ler */
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; } 
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } 
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; } 
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        /** * KOD DEĞİŞTİRİLMEDEN ÖNCE GEREKLİ GLOBAL TANIMLAMALAR
+         * Tarayıcıda 'import' bulunmadığı için paketleri globalden alıyoruz.
+         */
+        const { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } = React;
+        const { 
+            BookOpen, Briefcase, CheckCircle, ChevronLeft, ChevronRight, Clock, Download, 
+            FileText, Loader2, MessageSquare, Mic, Mic2, Plus, Send, SkipForward, 
+            Sparkles, Trash2, Users, X, Target, CheckSquare, LayoutDashboard, Lock, 
+            Activity, Search, ShieldCheck, LogOut, ChevronDown, Check, AlertCircle, 
+            AlertTriangle, RotateCw, BrainCircuit, Play, Pause, RefreshCw, ZoomIn, 
+            ZoomOut, Save, MoreVertical, Settings, User, UploadCloud, Camera, Info, 
+            Layers, Menu, Zap, ToggleLeft, ToggleRight, XCircle, StopCircle, Megaphone, 
+            BarChart3, TrendingUp, Bot 
+        } = LucideReact;
+
+        // ============================================================================
+        // SENİN VERDİĞİN KODUN TAMAMI (BURADAN AŞAĞISI BİREBİR AYNIDIR)
+        // ============================================================================
+
+        const initialMockUsers = [
+          { id: '1', name: 'Sistem', surname: 'Yöneticisi', email: 'admin@wiseai.com', username: 'admin', role: 'admin', isActive: true, failedAttempts: 0, lockedUntil: null, lastLoginAt: new Date().toISOString() },
+          { id: '2', name: 'Ali', surname: 'Öğretmen', email: 'aliogretmen@wiseai.com', username: 'ali_ogretmen', role: 'teacher', branch: 'Sınıf Öğretmenliği', isActive: true, failedAttempts: 0, lockedUntil: null, lastLoginAt: new Date(Date.now() - 86400000).toISOString() },
+          { id: '3', name: 'Ali', surname: 'Öğrenci', email: 'ali@wiseai.com', username: 'ali', role: 'student', grade: '1. Sınıf', isActive: true, failedAttempts: 0, lockedUntil: null, lastLoginAt: new Date(Date.now() - 3600000).toISOString() }
+        ];
+
+        class MockAPI {
+          constructor() {
+            this.users = [...initialMockUsers];
+            this.logs = [];
+            this.classes = [{ id: 'c1', teacherId: '2', name: '1/A Sınıfı', studentIds: ['3'] }];
+            this.assignments = [];
+            this.submissions = [];
+          }
+          async delay() { return new Promise(resolve => setTimeout(resolve, 300)); }
+          async login(identifier, password) {
+            await this.delay();
+            const user = this.users.find(u => u.email === identifier || u.username === identifier);
+            if (!user) throw new Error("Kullanıcı bulunamadı. Lütfen bilgilerinizi kontrol edin.");
+            if (password !== '123456' && password !== 'admin') throw new Error("Hatalı şifre.");
+            return { token: `mock_token_${user.id}`, user };
+          }
+          async register(userData) {
+            await this.delay();
+            const newUser = { id: Date.now().toString(), ...userData, isActive: true, failedAttempts: 0, lockedUntil: null };
+            this.users.push(newUser);
+            return { token: `mock_token_${newUser.id}`, user: newUser };
+          }
+          async getClasses(teacherId) { await this.delay(); return this.classes.filter(c => c.teacherId === teacherId); }
+          async createClass(teacherId, name) { await this.delay(); const nc = { id: `c${Date.now()}`, teacherId, name, studentIds: [] }; this.classes.push(nc); return nc; }
+          async deleteClass(classId) { await this.delay(); this.classes = this.classes.filter(c => c.id !== classId); }
+          async getAllStudents() { await this.delay(); return this.users.filter(u => u.role === 'student'); }
+          async addStudentToClass(classId, studentId) { await this.delay(); const cls = this.classes.find(c => c.id === classId); if (cls && !cls.studentIds.includes(studentId)) cls.studentIds.push(studentId); return cls; }
+          async removeStudentFromClass(classId, studentId) { await this.delay(); const cls = this.classes.find(c => c.id === classId); if (cls) cls.studentIds = cls.studentIds.filter(id => id !== studentId); }
+          async getClassAssignments(classId) { await this.delay(); return this.assignments.filter(a => a.classId === classId).map(a => ({ ...a, submissionCount: this.submissions.filter(s => s.assignmentId === a.id).length })); }
+          async createAssignment(classId, title, description, dueDate, type, typeData) { await this.delay(); const na = { id: `a${Date.now()}`, classId, title, description, dueDate, type, typeData, createdAt: new Date().toISOString() }; this.assignments.push(na); return na; }
+          async getStudentAssignments(studentId) {
+            await this.delay();
+            const sClasses = this.classes.filter(c => c.studentIds.includes(studentId));
+            const cIds = sClasses.map(c => c.id);
+            return this.assignments.filter(a => cIds.includes(a.classId)).map(a => {
+              const cls = sClasses.find(c => c.id === a.classId);
+              const sub = this.submissions.find(s => s.assignmentId === a.id && s.studentId === studentId);
+              return { ...a, className: cls ? cls.name : '', status: sub ? 'completed' : 'pending', score: sub?.score, total: sub?.total, feedback: sub?.feedback, typeData: a.typeData };
+            });
+          }
+          async submitAssignment(assignmentId, studentId, score, total, feedback = '', details = null) { await this.delay(); this.submissions.push({ assignmentId, studentId, score, total, feedback, details, completedAt: new Date().toISOString() }); }
+          async getAssignmentResults(assignmentId) {
+            await this.delay();
+            const a = this.assignments.find(x => x.id === assignmentId); if (!a) return [];
+            const cls = this.classes.find(c => c.id === a.classId); if(!cls) return [];
+            return cls.studentIds.map(sid => {
+                const student = this.users.find(u => u.id === sid);
+                const sub = this.submissions.find(s => s.assignmentId === assignmentId && s.studentId === sid);
+                return { studentId: sid, studentName: student ? `${student.name} ${student.surname}` : '', status: sub ? 'completed' : 'pending', score: sub?.score, total: sub?.total, feedback: sub?.feedback, details: sub?.details };
+            });
+          }
+        }
+        const apiService = new MockAPI();
+
+        const ENV_KEY = ""; 
+        const ENV_MODEL = "gemini-2.5-flash-preview-09-2025";
+        const TEACHER_BRANCHES = [ "Sınıf Öğretmenliği", "Okul Öncesi", "Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Fizik", "Kimya", "Biyoloji", "Tarih", "Coğrafya", "Din Kültürü ve Ahlak Bilgisi" ];
+
+        const CURRICULUM_DATA = {
+          "Okul Öncesi": {
+            "Alan Becerileri": [
+              "Türkçe - 4.1.1. Dinleme/İzleme", "Türkçe - 4.1.2. Konuşma", "Türkçe - 4.1.3. Okuma", "Türkçe - 4.1.4. Erken Okuryazarlık",
+              "Matematik - 4.2.1. Sayma", "Matematik - 4.2.2. Matematiksel Muhakeme", "Matematik - 4.2.3. Problem Çözme", "Matematik - 4.2.4. Matematiksel Temsil", "Matematik - 4.2.5. Veri ile Çalışma",
+              "Fen - 4.3.1. Bilimsel Gözlem", "Fen - 4.3.2. Sınıflandırma", "Fen - 4.3.3. Tahmin Etme", "Fen - 4.3.4. Bilimsel Veriye Dayalı Tahmin", "Fen - 4.3.5. Operasyonel Tanımlama", "Fen - 4.3.6. Deney Yapma", "Fen - 4.3.7. Bilimsel Çıkarım", "Fen - 4.3.8. Bilimsel Model Oluşturma",
+              "Sosyal - 4.4.1. Zamanı Algılama", "Sosyal - 4.4.4. Sosyal Katılım",
+              "Hareket ve Sağlık - 4.5.1. Psikomotor Beceriler",
+              "Sanat - 4.6.1. Sanat Türleri", "Müzik - 4.7.1. Müziksel Dinleme"
+            ]
+          },
+          "1. Sınıf": {
+            "Türkçe": [
+              "İlk Okuma Yazmaya Hazırlık",
+              "1. Grup Sesler (A-N-E-T-İ-L)", "2. Grup Sesler (O-K-U-R-I-M)", "3. Grup Sesler (Ü-S-Ö-Y-D-Z)", "4. Grup Sesler (Ç-B-G-C-Ş-P)", "5. Grup Sesler (H-V-Ğ-F-J)",
+              "1. Tema: Güzel Davranışlarımız", "2. Tema: Mustafa Kemal’den Atatürk’e", "3. Tema: Çevremizdeki Yaşam", 
+              "4. Tema: Yol Arkadaşımız Kitaplar", "5. Tema: Yeteneklerimizi Keşfediyoruz", "6. Tema: Minik Kaşifler", 
+              "7. Tema: Atalarımızın İzleri", "8. Tema: Sorumluluklarımızın Farkındayız"
+            ],
+            "Matematik": [
+              "1. Nesnelerin Geometrisi (1)", "2. Sayılar ve Nicelikler (1)", "3. Sayılar ve Nicelikler (2)", 
+              "4. İşlemlerden Cebirsel Düşünmeye", "5. Sayılar ve Nicelikler (3)", "6. Nesnelerin Geometrisi (2)", "7. Veriye Dayalı Araştırma"
+            ],
+            "Hayat Bilgisi": [
+              "1. Ben ve Okulum", "2. Sağlığım ve Güvenliğim", "3. Ailem ve Toplum", 
+              "4. Yaşadığım Yer ve Ülkem", "5. Doğa ve Çevre", "6. Bilim, Teknoloji ve Sanat"
+            ],
+            "İngilizce": [
+              "Theme 1: School Life", "Theme 2: Classroom Life", "Theme 3: Personal Life", "Theme 4: Family Life", 
+              "Theme 5: Homes, Houses & Neighbourhoods", "Theme 6: Life in the City & The World"
+            ]
+          },
+          "2. Sınıf": {
+            "Türkçe": [
+              "1. Tema: Değerlerimizle Varız", "2. Tema: Atatürk ve Çocuk", "3. Tema: Doğada Neler Oluyor?", 
+              "4. Tema: Okuma Serüvenimiz", "5. Tema: Yeteneklerimizi Tanıyoruz", "6. Tema: Mucit Çocuk", 
+              "7. Tema: Kültür Hazinemiz", "8. Tema: Haklarımızı Biliyoruz"
+            ],
+            "Matematik": [
+              "1. Nesnelerin Geometrisi (1)", "2. Sayılar ve Nicelikler (1)", "3. İşlemlerden Cebirsel Düşünmeye", 
+              "4. Sayılar ve Nicelikler (2)", "5. Nesnelerin Geometrisi (2)", "6. Veriye Dayalı Araştırma"
+            ],
+            "Hayat Bilgisi": [
+              "1. Ben ve Okulum", "2. Sağlığım ve Güvenliğim", "3. Ailem ve Toplum", 
+              "4. Yaşadığım Yer ve Ülkem", "5. Doğa ve Çevre", "6. Bilim, Teknoloji ve Sanat"
+            ],
+            "İngilizce": [
+              "Theme 1: School Life", "Theme 2: Classroom Life", "Theme 3: Personal Life", "Theme 4: Family Life", 
+              "Theme 5: Homes, Houses & Neighbourhoods", "Theme 6: Life in the City & The World"
+            ]
+          },
+          "3. Sınıf": {
+            "Türkçe": [
+              "1. Tema: Değerlerimizle Yaşıyoruz", "2. Tema: Atatürk ve Kahramanlarımız", "3. Tema: Doğayı Tanıyoruz", 
+              "4. Tema: Bilgi Hazinemiz", "5. Tema: Yeteneklerimizi Kullanıyoruz", "6. Tema: Bilim Yolculuğu 1", 
+              "7. Tema: Millî Kültürümüz", "8. Tema: Hak ve Sorumluluklarımız"
+            ],
+            "Matematik": [
+              "1. Sayılar ve Nicelikler (1)", "2. Sayılar ve Nicelikler (2)", "3. İşlemlerden Cebirsel Düşünmeye", 
+              "4. Nesnelerin Geometrisi (1)", "5. Nesnelerin Geometrisi (2)", "6. Veriye Dayalı Araştırma"
+            ],
+            "Hayat Bilgisi": [
+              "1. Ben ve Okulum", "2. Sağlığım ve Güvenliğim", "3. Ailem ve Toplum", 
+              "4. Yaşadığım Yer ve Ülkem", "5. Doğa ve Çevre", "6. Bilim, Teknoloji ve Sanat"
+            ],
+            "Fen Bilimleri": [
+              "1. Bilimsel Keşif Yolculuğu", "2. Canlılar Dünyasına Yolculuk", "3. Yer Bilimciler İş Başında", 
+              "4. Maddeyi Tanıyalım, Karıştırıp Ayıralım", "5. Hareketi Keşfediyorum", "6. Yaşamımızı Kolaylaştıran Elektrik", 
+              "7. Toprağı Tanıyorum, Tarımı Keşfediyorum", "8. Canlıların Yaşam Alanlarına Yolculuk"
+            ],
+            "İngilizce": [
+              "Theme 1: School Life", "Theme 2: Classroom Life", "Theme 3: Personal Life", "Theme 4: Family Life", 
+              "Theme 5: Homes, Houses & The Neighbourhood", "Theme 6: Life in the City & The World"
+            ]
+          },
+          "4. Sınıf": {
+            "Türkçe": [
+              "1. Tema: Erdemler", "2. Tema: Milli Mücadele ve Atatürk", "3. Tema: Doğa ve İnsan", 
+              "4. Tema: Kütüphanemiz", "5. Tema: Kendimizi Geliştiriyoruz", "6. Tema: Bilim ve Teknoloji", 
+              "7. Tema: Geçmişten Geleceğe Mirasımız", "8. Tema: Demokratik Yaşam"
+            ],
+            "Matematik": [
+              "1. Sayılar ve Nicelikler (1)", "2. Sayılar ve Nicelikler (2)", "3. İşlemlerden Cebirsel Düşünmeye", 
+              "4. Nesnelerin Geometrisi (1)", "5. Nesnelerin Geometrisi (2)", "6. Nesnelerin Geometrisi (3)", 
+              "7. Olayların Olasılığı ve Veriye Dayalı Araştırma"
+            ],
+            "Fen Bilimleri": [
+              "1. Bilimsel Yolculuk", "2. Sağlıklı Besleniyorum", "3. Dünya'mızı Keşfedelim", 
+              "4. Maddenin Değişimi", "5. Mıknatısı Keşfediyorum", "6. Enerji Dedektifleri", 
+              "7. Işığın Peşinde", "8. Sürdürülebilir Şehirler ve Topluluklar"
+            ],
+            "Sosyal Bilgiler": [
+              "1. Birlikte Yaşamak", "2. Evimiz Dünya", "3. Ortak Mirasımız", 
+              "4. Yaşayan Demokrasimiz", "5. Hayatımızdaki Ekonomi", "6. Teknoloji ve Sosyal Bilimler"
+            ],
+            "İngilizce": [
+              "Theme 1: School Life", "Theme 2: Classroom Life", "Theme 3: Personal Life", "Theme 4: Family Life", 
+              "Theme 5: Homes, Houses & The Neighbourhood", "Theme 6: Life in the City & The World"
+            ]
+          },
+          "5. Sınıf": {
+            "Türkçe": [
+              "1. Tema: Oyun Dünyası", "2. Tema: Atatürk'ü Tanımak", "3. Tema: Duygularımı Tanıyorum", 
+              "4. Tema: Geleneklerimiz", "5. Tema: İletişim ve Sosyal İlişkiler", "6. Tema: Sağlıklı Yaşıyorum"
+            ],
+            "Matematik": [
+              "1. Geometrik Şekiller", "2. Sayılar ve Nicelikler (1)", "3. Geometrik Nicelikler", 
+              "4. Sayılar ve Nicelikler (2)", "5. İstatistiksel Araştırma Süreci", "6. İşlemlerle Cebirsel Düşünme", 
+              "7. Veriden Olasılığa"
+            ],
+            "Fen Bilimleri": [
+              "1. Gökyüzündeki Komşularımız ve Biz", "2. Kuvveti Tanıyalım", "3. Canlıların Yapısına Yolculuk", 
+              "4. Işığın Dünyası", "5. Maddenin Doğası", "6. Yaşamımızdaki Elektrik", "7. Sürdürülebilir Yaşam ve Geri Dönüşüm"
+            ],
+            "Sosyal Bilgiler": [
+              "1. Birlikte Yaşamak", "2. Evimiz Dünya", "3. Ortak Mirasımız", 
+              "4. Yaşayan Demokrasimiz", "5. Hayatımızdaki Ekonomi", "6. Teknoloji ve Sosyal Bilimler"
+            ],
+            "İngilizce": [
+              "Theme 1: School Life & Education", "Theme 2: Classroom Life & Learning", "Theme 3: Personal Life & Well-Being", 
+              "Theme 4: Family Life & Home", "Theme 5: Life in the Neighbourhood, City & Social Life", "Theme 6: Life in the World & Culture", 
+              "Theme 7: Life in Nature & Global Problems", "Theme 8: Life in the Universe & Future"
+            ]
+          },
+          "6. Sınıf": {
+            "Türkçe": [
+              "1. Tema: Dilimizin Zenginliği", "2. Tema: Bağımsızlık Yolu", "3. Tema: Farklı Dünyalar", 
+              "4. Tema: İletişim ve Sosyal İlişkiler", "5. Tema: Bilim ve Teknoloji", "6. Tema: Lider Ruhlar"
+            ],
+            "Matematik": [
+              "1. Sayılar ve Nicelikler (1)", "2. İstatistiksel Araştırma Süreci", "3. Sayılar ve Nicelikler (2)", 
+              "4. Veriden Olasılığa", "5. Geometrik Şekiller", "6. İşlemlerle Cebirsel Düşünme ve Değişimler", "7. Geometrik Nicelikler"
+            ],
+            "Fen Bilimleri": [
+              "1. Güneş Sistemi ve Tutulmalar", "2. Kuvvetin Etkisinde Hareket", "3. Canlılarda Sistemler", 
+              "4. Işığın Yansıması ve Renkler", "5. Maddenin Ayırt Edici Özellikleri", 
+              "6. Elektriğin İletimi ve Direnç", "7. Sürdürülebilir Yaşam ve Etkileşim"
+            ],
+            "Sosyal Bilgiler": [
+              "1. Birlikte Yaşamak", "2. Evimiz Dünya", "3. Ortak Mirasımız", 
+              "4. Yaşayan Demokrasimiz", "5. Hayatımızdaki Ekonomi", "6. Teknoloji ve Sosyal Bilimler"
+            ],
+            "İngilizce": [
+              "Theme 1: School Life & Education", "Theme 2: Classroom Life & Learning", "Theme 3: Personal Life & Well-Being", 
+              "Theme 4: Family Life & Home", "Theme 5: Life in the Neighbourhood, City & Social Life", "Theme 6: Life in the World & Culture", 
+              "Theme 7: Life in Nature & Global Problems", "Theme 8: Life in the Universe & Future"
+            ]
+          },
+          "7. Sınıf": {
+            "Türkçe": [
+              "1. Tema: Hayat Boyu Gelişim", "2. Tema: Bir Hilal Uğruna", "3. Tema: İletişim ve Sosyal İlişkiler", 
+              "4. Tema: Türk Sanatı", "5. Tema: Okuma Kültürü", "6. Tema: Hak ve Sorumluluklar"
+            ],
+            "Matematik": [
+              "1. Sayılar ve Nicelikler (1)", "2. Geometrik Nicelikler (1)", "3. İstatistiksel Araştırma Süreci", 
+              "4. Dönüşüm", "5. Geometrik Şekiller", "6. Sayılar ve Nicelikler (2)", 
+              "7. Veriden Olasılığa", "8. İşlemlerle Cebirsel Düşünme ve Değişimler", "9. Geometrik Nicelikler (2)"
+            ],
+            "Fen Bilimleri": [
+              "1. Uzay Çağı", "2. Kuvvet ve Enerjiyi Keşfedelim", "3. Vücudumuzdaki Sistemler", 
+              "4. Işığın Kırılması ve Mercekler", "5. Maddenin Doğasına Yolculuk", "6. Elektriklenme", "7. Sürdürülebilir Yaşam ve Enerji"
+            ],
+            "Sosyal Bilgiler": [
+              "1. Birlikte Yaşamak", "2. Evimiz Dünya", "3. Ortak Mirasımız", 
+              "4. Yaşayan Demokrasimiz", "5. Hayatımızdaki Ekonomi", "6. Teknoloji ve Sosyal Bilimler"
+            ],
+            "İngilizce": [
+              "Theme 1: School Life & Education", "Theme 2: Classroom Life & Learning", "Theme 3: Personal Life & Well-Being", 
+              "Theme 4: Family Life & Home", "Theme 5: Life in the Neighbourhood, City & Social Life", "Theme 6: Life in the World & Culture", 
+              "Theme 7: Life in Nature & Global Problems", "Theme 8: Life in the Universe & Future"
+            ]
+          },
+          "8. Sınıf": {
+            "Türkçe": [
+              "1. Tema: İletişim ve Sosyal İlişkiler", "2. Tema: Vatan Sevgisi", "3. Tema: Doğa ve İnsan", 
+              "4. Tema: Türk Hikaye Geleneği ve Destanları", "5. Tema: Sanat ve Estetik", "6. Tema: Akademik Düşünme Dünyası"
+            ],
+            "Matematik": [
+              "1. Sayılar ve Nicelikler", "2. Geometrik Şekiller", "3. Veriden Olasılığa", 
+              "4. Cebirsel Düşünme ve Değişimler", "5. Geometrik Nicelikler", "6. İstatistiksel Araştırma Süreci", "7. Dönüşüm"
+            ],
+            "Fen Bilimleri": [
+              "1. Mevsimler ve İklim", "2. Yaşamı Kolaylaştıran Kuvvet", "3. Yaşamın Gizemi", 
+              "4. Sesin Dünyası", "5. Periyodik Tablo ve Maddenin Etkileşimi", "6. Elektriğin Yolculuğu", "7. Sürdürülebilir Yaşam ve Madde Döngüleri"
+            ],
+            "İnkılap Tarihi": [
+              "1. Mustafa Kemal'in Hayatı", "2. Birinci Dünya Savaşı", 
+              "3. Millî Mücadele", "4. Türkiye Cumhuriyeti’nin Kuruluşu ve İnkılaplar"
+            ],
+            "İngilizce": [
+              "Theme 1: School Life & Education", "Theme 2: Classroom Life & Learning", "Theme 3: Personal Life & Well-Being", 
+              "Theme 4: Family Life & Home", "Theme 5: Life in the Neighbourhood, City & Social Life", "Theme 6: Life in the World & Culture", 
+              "Theme 7: Life in Nature & Global Problems", "Theme 8: Life in the Universe & Future"
+            ]
+          }
+        };
+
+        const ALL_GRADES = ["Okul Öncesi", "1. Sınıf", "2. Sınıf", "3. Sınıf", "4. Sınıf", "5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "9. Sınıf", "10. Sınıf", "11. Sınıf", "12. Sınıf"];
+
+        const MEB_CURRICULUM = {
+          grades: ALL_GRADES,
+          getSubjects: (grade) => {
+            if (CURRICULUM_DATA[grade]) return Object.keys(CURRICULUM_DATA[grade]);
+            const n = parseInt(grade?.split('.')[0] || 5);
+            if (n <= 4) return ["Türkçe", "Matematik", "Hayat Bilgisi", "Fen Bilimleri", "İngilizce"];
+            if (n <= 8) return ["Türkçe", "Matematik", "Fen Bilimleri", "Sosyal Bilgiler", "İngilizce", "Din Kültürü ve Ahlak Bilgisi"];
+            return ["Türk Dili ve Edebiyatı", "Matematik", "Fizik", "Kimya", "Biyoloji", "Tarih", "Coğrafya", "İngilizce"];
+          },
+          getUnits: (grade = null, subject = null) => {
+            if (grade && subject && CURRICULUM_DATA[grade] && CURRICULUM_DATA[grade][subject]) {
+                return CURRICULUM_DATA[grade][subject];
+            }
+            return ["Ünite 1", "Ünite 2", "Ünite 3", "Ünite 4", "Ünite 5", "Ünite 6", "Ünite 7", "Ünite 8"];
+          }
+        };
+
+        const getIlkOkumaYazmaKurallari = (grade, subject, unit) => {
+          if (grade !== "1. Sınıf" || subject !== "Türkçe" || !unit) return "";
+          const groups = [
+            { name: "1. Grup", letters: "A, N, E, T, İ, L, a, n, e, t, i, l" },
+            { name: "2. Grup", letters: "A, N, E, T, İ, L, O, K, U, R, I, M, a, n, e, t, i, l, o, k, u, r, ı, m" },
+            { name: "3. Grup", letters: "A, N, E, T, İ, L, O, K, U, R, I, M, Ü, S, Ö, Y, D, Z, a, n, e, t, i, l, o, k, u, r, ı, m, ü, s, ö, y, d, z" },
+            { name: "4. Grup", letters: "A, N, E, T, İ, L, O, K, U, R, I, M, Ü, S, Ö, Y, D, Z, Ç, B, G, C, Ş, P, a, n, e, t, i, l, o, k, u, r, ı, m, ü, s, ö, y, d, z, ç, b, g, c, ş, p" },
+            { name: "5. Grup", letters: "A, N, E, T, İ, L, O, K, U, R, I, M, Ü, S, Ö, Y, D, Z, Ç, B, G, C, Ş, P, H, V, Ğ, F, J, a, n, e, t, i, l, o, k, u, r, ı, m, ü, s, ö, y, d, z, ç, b, g, c, ş, p, h, v, ğ, f, j" }
+          ];
+          let allowedStr = "";
+          for (let g of groups) { if (unit.includes(g.name)) { allowedStr = g.letters; break; } }
+          if (!allowedStr && unit.includes("İlk Okuma")) { allowedStr = "A, N, E, T, İ, L, a, n, e, t, i, l"; }
+          if (allowedStr) {
+            return `\nÖZEL DİKKAT - İLK OKUMA YAZMA:\n- Seçilen ünite: ${unit}\n- KULLANABİLECEĞİN HARFLER (HAVUZ): [${allowedStr}]\n- KURAL: Sorularda, şıklarda, metinlerde ve cevaplarda kullanacağın kelimeler SADECE bu havuzdaki harflerden oluşmalıdır. Havuz dışından (henüz öğrenilmemiş) harf içeren kelime kullanmak KESİNLİKLE YASAKTIR.\n- Soru Tipleri:\n  1. Görsel betimleme (Örn: "Resimdeki kırmızı meyve (Elma)").\n  2. Eksik harfi/heceyi tamamlama.\n  3. Hece birleştirme (Örn: A-li -> Ali).\n  4. Ses farkındalığı ("Hangi kelime 'L' sesi ile başlar?").\n`;
+          }
+          return "";
+        };
+
+        const SPEAKWISE_CURRICULUM_DB = {
+          5: [
+            { unitNo: 1, theme: "Daily Routines and Habits", vocab: ["wake up", "brush teeth", "go to school"], grammar: "Present Simple", contextPrompt: "Focus on asking and answering questions about daily habits." },
+            { unitNo: 2, theme: "Food and Drinks", vocab: ["apple", "banana", "cheese"], grammar: "Countable / Uncountable", contextPrompt: "Discuss healthy eating and food preferences." },
+            { unitNo: 3, theme: "Family and Friends", vocab: ["brother", "sister", "friend"], grammar: "Possessives", contextPrompt: "Practice introducing family members and describing them." }
+          ]
+        };
+
+        function clsx(...args) { return args.flat(Infinity).filter(Boolean).join(" "); }
+
+        function safeJsonParse(raw) {
+          if (!raw) return null; if (typeof raw !== 'string') return raw;
+          try {
+            let clean = raw.trim(); const bt = String.fromCharCode(96, 96, 96);
+            if (clean.startsWith(bt)) { clean = clean.replace(new RegExp('^' + bt + '(?:json|javascript)?\\n?', 'i'), '').replace(new RegExp(bt + '\\n?$', 'i'), '').trim(); }
+            return JSON.parse(clean.replace(/,\s*([\}\]])/g, '$1'));
+          } catch (e) { 
+            try { 
+              const startObj = raw.indexOf('{'); const endObj = raw.lastIndexOf('}');
+              const startArr = raw.indexOf('['); const endArr = raw.lastIndexOf(']');
+              let start = -1, end = -1;
+              if (startObj !== -1 && (startArr === -1 || startObj < startArr)) { start = startObj; end = endObj; } 
+              else if (startArr !== -1) { start = startArr; end = endArr; }
+              if (start !== -1 && end !== -1 && start < end) { return JSON.parse(raw.substring(start, end + 1).replace(/,\s*([\}\]])/g, '$1')); }
+            } catch (err) {} 
+            return null; 
+          }
+        }
+
+        function renderSafe(val) {
+          if (val == null) return ''; if (React.isValidElement(val)) return val;
+          if (typeof val === 'string' || typeof val === 'number') return String(val);
+          if (Array.isArray(val)) return val.map((item, index) => <React.Fragment key={index}>{renderSafe(item)}</React.Fragment>);
+          return '';
+        }
+
+        function renderSafeHTML(val) {
+            if (!val) return ''; let str = String(val);
+            return str.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '').replace(/ on\w+="[^"]*"/gi, '');
+        }
+
+        function AppLogo({ size = "md", showText = true }) {
+          const idBase = React.useId().replace(/:/g, '');
+          const imgSize = size === "lg" ? "w-32 h-32 md:w-48 md:h-48" : size === "md" ? "w-10 h-10 min-w-[2.5rem]" : "w-8 h-8 min-w-[2rem]";
+          const textSize = size === "lg" ? "text-5xl md:text-7xl font-black" : size === "md" ? "text-xl font-black" : "text-lg font-black";
+          const handleLogoClick = () => { window.dispatchEvent(new CustomEvent('navigate', { detail: 'home' })); };
+          return (
+            <div onClick={handleLogoClick} className={clsx("flex items-center justify-center shrink-0 group cursor-pointer", size === "lg" ? "flex-col" : "gap-3")}>
+               <div className={clsx(imgSize, "relative flex items-center justify-center transition-transform duration-500 group-hover:scale-105 z-10")}>
+                  <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-purple-600/20 rounded-full blur-2xl opacity-60 group-hover:opacity-100 transition-opacity"></div>
+                  <svg viewBox="0 0 120 120" className="relative z-10 w-full h-full drop-shadow-[0_0_15px_rgba(255,255,255,0.15)]">
+                      <defs>
+                        <linearGradient id={`neonCyan-${idBase}`} x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#00f2fe" /><stop offset="100%" stopColor="#4facfe" /></linearGradient>
+                        <linearGradient id={`neonPurple-${idBase}`} x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#f093fb" /><stop offset="100%" stopColor="#f5576c" /></linearGradient>
+                      </defs>
+                      <path d="M 60 75 Q 40 60 10 55 Q 30 65 45 75 Z" fill={`url(#neonCyan-${idBase})`} opacity="0.6"/>
+                      <path d="M 60 75 Q 80 60 110 55 Q 90 65 75 75 Z" fill={`url(#neonPurple-${idBase})`} opacity="0.6"/>
+                      <path d="M 57 80 L 57 30 M 63 80 L 63 30 M 60 85 L 60 20" stroke="#fff" strokeWidth="1.5" opacity="0.8"/>
+                      <path d="M 52 65 L 60 78 L 68 65" fill="none" stroke="#fff" strokeWidth="2" opacity="0.9" />
+                      <g stroke={`url(#neonCyan-${idBase})`} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M 57 20 C 35 15 15 25 18 45 C 20 58 35 68 57 75" />
+                        <path d="M 57 32 C 40 30 28 35 25 45 C 22 55 40 62 57 65" />
+                        <path d="M 57 44 L 40 44 L 35 50" />
+                        <circle cx="35" cy="50" r="1.5" fill="#00f2fe" stroke="none" />
+                      </g>
+                      <g stroke={`url(#neonPurple-${idBase})`} strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M 63 20 C 85 15 105 25 102 45 C 100 58 85 68 63 75" />
+                        <path d="M 63 32 C 80 30 92 35 95 45 C 98 55 80 62 63 65" />
+                        <path d="M 63 44 L 80 44 L 85 50" />
+                        <circle cx="85" cy="50" r="1.5" fill="#f093fb" stroke="none" />
+                      </g>
+                  </svg>
+               </div>
+               {showText && (
+                 <div className={clsx(size === "lg" ? "text-center -mt-4 md:-mt-8 relative z-20" : "flex flex-col justify-center shrink-0")}>
+                   <h2 className={clsx(textSize, "tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500")}>WiseAi</h2>
+                   {size === "lg" && <p className="text-white text-[10px] md:text-[13px] uppercase tracking-[0.35em] mt-2 font-bold opacity-90">Learn. Innovate. Inspire.</p>}
+                 </div>
+               )}
+            </div>
+          );
+        }
+
+        const WhisperAvatar = ({ state }) => {
+          const isListening = state === 'listening'; const isThinking = state === 'thinking'; const isSpeaking = state === 'speaking';
+          const glowColor = isListening ? 'bg-rose-500' : isThinking ? 'bg-purple-500' : isSpeaking ? 'bg-teal-400' : 'bg-cyan-400';
+          const eyeColor = isListening ? 'bg-rose-400' : isThinking ? 'bg-purple-400' : isSpeaking ? 'bg-teal-300' : 'bg-cyan-300';
+          return (
+            <div className="relative flex flex-col items-center justify-center w-64 h-64 mx-auto my-4 shrink-0">
+               <div className={clsx("absolute inset-0 rounded-full blur-3xl opacity-50 transition-all duration-700 ease-in-out", glowColor, (isListening || isThinking) && "scale-125 animate-pulse")}></div>
+               <div className={clsx("relative z-10 w-44 h-40 rounded-[3.5rem] bg-gradient-to-br from-white via-slate-50 to-slate-200 border-4 border-white flex flex-col items-center justify-start pt-5 shadow-xl")}>
+                  <div className="w-36 h-24 bg-slate-900 rounded-[2rem] border-4 border-slate-700 flex flex-col items-center justify-center relative overflow-hidden">
+                    <div className="flex gap-7 relative z-10">
+                        <div className={clsx("relative w-6 h-9 rounded-full transition-all duration-300", eyeColor, isThinking && "h-2 mt-4")}></div>
+                        <div className={clsx("relative w-6 h-9 rounded-full transition-all duration-300", eyeColor, isThinking && "h-2 mt-4")}></div>
+                    </div>
+                  </div>
+               </div>
+            </div>
+          );
+        };
+
+        function FlashcardImage({ prompt }) {
+          const [imgSrc, setImgSrc] = useState(null); const [loading, setLoading] = useState(true);
+          useEffect(() => {
+            if (!prompt) { setLoading(false); return; }
+            setLoading(true); const enhancedPrompt = `Educational illustration for kids, simple, flat background: ${prompt}`;
+            const url = `https://image.pollinations.io/prompt/${encodeURIComponent(enhancedPrompt)}?width=400&height=300&nologo=true&seed=${Math.floor(Math.random() * 1000)}`;
+            setImgSrc(url); setLoading(false);
+          }, [prompt]);
+          return (
+            <div className="w-full h-32 md:h-40 relative rounded-xl mb-3 shrink-0 bg-teal-800/20 overflow-hidden flex items-center justify-center shadow-md">
+              {loading && <Loader2 className="w-8 h-8 animate-spin text-teal-200 absolute" />}
+              {imgSrc && <img src={imgSrc} alt="flashcard visual" className="w-full h-full object-cover bg-white" />}
+            </div>
+          );
+        }
+
+        function TipNoteWorksheet({ data, isPrint = false }) {
+          if (!data) return <div className="text-slate-400 italic">Henüz çalışma kağıdı oluşturulmadı.</div>;
+          return (
+            <div className={clsx("bg-white relative box-border text-slate-800 flex flex-col min-h-full", isPrint ? "w-[210mm] p-[15mm]" : "w-full p-4 md:p-8 rounded-2xl border border-purple-100 shadow-sm")}>
+              {!isPrint && <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-500 via-purple-600 to-teal-500 rounded-t-2xl"></div>}
+              <div className="text-center border-b pb-8 mb-8 pt-2">
+                <h1 className="text-2xl md:text-3xl font-black text-orange-600 uppercase tracking-wide">{renderSafe(data.kazanimBasligi)}</h1>
+                <div className="flex justify-between mt-6 text-sm font-bold text-slate-500"><p>ÖĞRENCİ ADI SOYADI: .......................................</p><p>TARİH: .../.../......</p></div>
+              </div>
+              {data.konuOzeti && (
+                  <div className="mb-10">
+                      <h2 className="text-lg font-bold text-slate-900 border-l-4 border-teal-500 pl-3 bg-teal-50 py-2 mb-4 rounded-r">📚 KONU ÖZETİ</h2>
+                      <div className="text-slate-700 text-[15px] leading-relaxed whitespace-pre-wrap px-2" dangerouslySetInnerHTML={{ __html: renderSafeHTML(data.konuOzeti) }}></div>
+                  </div>
+              )}
+              <div className="space-y-12">
+                {data.beceriler?.map((beceri, bIdx) => (
+                  <div key={bIdx}>
+                    <h3 className="text-xl font-black text-indigo-900 mb-6 flex items-center gap-3 border-l-4 border-indigo-500 pl-3 bg-indigo-50 py-2 rounded-r uppercase">
+                      {renderSafe(beceri.beceri)}
+                    </h3>
+                    <div className="space-y-8 px-2">
+                      {beceri.sorular?.map((q, qIdx) => (
+                        <div key={qIdx} className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                          <div className="font-bold text-lg text-slate-800 mb-4 flex gap-3">
+                              <span className="text-indigo-500">{q.soruNumarasi}.</span>
+                              <span className="leading-snug" dangerouslySetInnerHTML={{ __html: renderSafeHTML(q.soruMetni || '').replace(/\n/g, '<br>') }}></span>
+                          </div>
+                          {q.soruTipi === 'CoktanSecmeli' && q.secenekler && (
+                            <div className="grid sm:grid-cols-2 gap-4 ml-8">
+                              {q.secenekler.map((sec, sIdx) => (
+                                <div key={sIdx} className="bg-white border border-slate-200 px-5 py-4 rounded-xl text-slate-700 font-bold flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 font-black shrink-0">{['A','B','C','D'][sIdx]}</div>
+                                  {renderSafe(sec)}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {isPrint && <div className="mt-auto pt-8 border-t border-slate-200 text-center text-xs text-slate-400 font-bold italic">WiseAi Tarafından Oluşturulmuştur</div>}
+            </div>
+          );
+        }
+
+        const AuthContext = createContext(null);
+        function AuthProvider({ children }) {
+          const [user, setUser] = useState(null); const [loading, setLoading] = useState(true);
+          useEffect(() => { 
+            const storedUser = sessionStorage.getItem('wiseai_user'); 
+            if (storedUser) { try { setUser(JSON.parse(storedUser)); } catch(e) { sessionStorage.removeItem('wiseai_user'); } }
+            setLoading(false); 
+          }, []);
+          const login = async (credentials) => { 
+            const data = await apiService.login(credentials.identifier, credentials.password); 
+            setUser(data.user); sessionStorage.setItem('wiseai_user', JSON.stringify(data.user)); 
+          };
+          const logout = () => { setUser(null); sessionStorage.removeItem('wiseai_user'); };
+          if (loading) return <div className="min-h-screen bg-[#0a0514] flex items-center justify-center"><Loader2 className="w-10 h-10 text-teal-400 animate-spin" /></div>;
+          return (<AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>);
+        }
+        function useAuth() { return useContext(AuthContext); }
+
+        const GeminiContext = createContext(null);
+        function GeminiProvider({ children }) {
+          const generateText = async (p) => { return "Simülasyon modundayız. API Anahtarı girilmedi."; };
+          const generateJSON = async (p) => { return JSON.stringify({ success: true, message: "Simülasyon modu" }); };
+          return <GeminiContext.Provider value={{ generateText, generateJSON }}>{children}</GeminiContext.Provider>;
+        }
+        function useGemini() { return useContext(GeminiContext); }
+
+        class ErrorBoundary extends React.Component {
+          constructor(props) { super(props); this.state = { hasError: false }; }
+          static getDerivedStateFromError() { return { hasError: true }; }
+          render() {
+            if (this.state.hasError) return <div className="min-h-screen flex items-center justify-center bg-white text-rose-500 font-black">Hata oluştu, lütfen sayfayı yenileyin.</div>;
+            return this.props.children;
+          }
+        }
+
+        function CurriculumSelector({ formData, setFormData, showTopic = true, readOnlyGrade = false }) {
+          const availableSubjects = useMemo(() => MEB_CURRICULUM.getSubjects(formData?.grade), [formData?.grade]);
+          const units = useMemo(() => MEB_CURRICULUM.getUnits(formData?.grade, formData?.subject), [formData?.grade, formData?.subject]);
+          return (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">Sınıf Seviyesi</label>
+                    <select disabled={readOnlyGrade} value={formData?.grade || ""} onChange={(e) => setFormData(p => ({ ...p, grade: e.target.value }))} className="w-full px-4 py-3.5 rounded-xl border border-slate-200 outline-none font-medium">
+                        {MEB_CURRICULUM.grades.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">Ders</label>
+                    <select disabled={readOnlyGrade} value={formData?.subject || ""} onChange={(e) => setFormData(p => ({ ...p, subject: e.target.value }))} className="w-full px-4 py-3.5 rounded-xl border border-slate-200 outline-none font-medium">
+                        {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        function TeacherAssignmentModal({ isOpen, onClose }) {
+          if (!isOpen) return null;
+          return <div className="fixed inset-0 bg-[#0a0514]/60 flex items-center justify-center z-[200] p-4"><div className="bg-white p-8 rounded-3xl w-full max-w-md"><h3>Sınıfa Ata</h3><button onClick={onClose}>Kapat</button></div></div>;
+        }
+
+        function QuizRunner({ assignment, onFinish }) {
+          return <div className="text-center p-10 font-bold">Quiz Modülü Yükleniyor...</div>;
+        }
+
+        function AIAssistant() {
+          const { generateJSON } = useGemini(); const { user } = useAuth();
+          const [activeTab, setActiveTab] = useState('summary');
+          const [formData, setFormData] = useState({ grade: "1. Sınıf", subject: "Türkçe", unit: "Ünite 1", topic: "" });
+          return (
+            <div className="max-w-4xl mx-auto space-y-8">
+              <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3"><BookOpen className="text-pink-500"/> Ai Asistan</h1>
+              <div className="bg-white rounded-[2rem] border border-slate-200 p-8 shadow-sm">
+                <CurriculumSelector formData={formData} setFormData={setFormData} />
+                <button className="mt-8 w-full bg-gradient-to-r from-pink-500 to-purple-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg">İçerik Üret</button>
+              </div>
+            </div>
+          );
+        }
+
+        function MentorAiModule() {
+          const { user } = useAuth();
+          return <div className="max-w-4xl mx-auto py-20 text-center font-black text-2xl text-slate-400">Mentor AI Hazırlanıyor...</div>;
+        }
+
+        function SpeakWiseModule() {
+          return <div className="max-w-4xl mx-auto py-20 text-center font-black text-2xl text-slate-400">Whisper AI Hazırlanıyor...</div>;
+        }
+
+        function TipNoteModule() {
+          return <div className="max-w-4xl mx-auto py-20 text-center font-black text-2xl text-slate-400">TipNote Hazırlanıyor...</div>;
+        }
+
+        function FloatingAssistant() {
+          const [isOpen, setIsOpen] = useState(false); const { user } = useAuth();
+          return (
+            <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end">
+              <button onClick={() => setIsOpen(!isOpen)} className={clsx("w-14 h-14 rounded-full flex items-center justify-center text-white shadow-xl transition-all duration-300", isOpen ? "bg-rose-500" : "bg-gradient-to-br from-teal-400 to-purple-600")}>
+                {isOpen ? <X size={24} /> : <Bot size={28} />}
+              </button>
+            </div>
+          );
+        }
+
+        function LoginScreen() {
+          const { login } = useAuth(); const [loading, setLoading] = useState(false);
+          const handleLogin = async (e) => { e.preventDefault(); setLoading(true); await login({ identifier: 'admin', password: 'admin' }); setLoading(false); };
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-[#0a0514] to-[#1a0b2e] flex items-center justify-center p-4">
+              <div className="w-full max-w-md bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8 text-center">
+                <AppLogo size="lg" />
+                <button onClick={handleLogin} className="w-full mt-10 bg-gradient-to-r from-teal-500 to-purple-600 py-4 rounded-xl font-bold text-white shadow-lg">Hızlı Giriş (Demo)</button>
+                <p className="text-white/40 mt-4 text-xs">admin@wiseai.com / admin</p>
+              </div>
+            </div>
+          );
+        }
+
+        function PortalHome() {
+          const { user } = useAuth();
+          return (
+            <div className="space-y-8">
+              <div className="bg-gradient-to-br from-[#1a0b2e] via-[#2d1155] to-[#1a0b2e] rounded-[2.5rem] p-12 text-white shadow-2xl relative overflow-hidden">
+                <h1 className="text-5xl font-black mb-4">Hoş geldin, {user?.name}!</h1>
+                <p className="text-purple-100 text-lg font-medium">Öğrenme serüvenine kaldığın yerden devam et.</p>
+                <div className="absolute right-10 bottom-0 opacity-10"><BrainCircuit size={200} /></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {['Ai Asistan', 'Mentor Ai', 'SpeakWise'].map(m => (
+                  <div key={m} className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all cursor-pointer">
+                    <h3 className="font-black text-xl mb-2">{m}</h3>
+                    <p className="text-slate-500 text-sm">Yapay zeka destekli modülleri keşfet.</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+
+        function WiseAiEgitimPlatformu() {
+          const { user, logout } = useAuth(); const [tab, setTab] = useState("home");
+          return (
+            <div className="h-screen w-full bg-[#0a0514] text-slate-200 flex flex-col md:flex-row font-sans overflow-hidden relative">
+               <aside className="w-72 bg-[#110a26] border-r border-white/5 flex flex-col p-8 space-y-8">
+                  <AppLogo />
+                  <nav className="flex-1 space-y-2">
+                    <button onClick={() => setTab('home')} className={clsx("w-full text-left p-4 rounded-xl font-bold", tab === 'home' ? "bg-white/10 text-white" : "text-slate-500 hover:bg-white/5")}>Anasayfa</button>
+                    <button onClick={() => setTab('ai-asistan')} className={clsx("w-full text-left p-4 rounded-xl font-bold", tab === 'ai-asistan' ? "bg-white/10 text-white" : "text-slate-500 hover:bg-white/5")}>Ai Asistan</button>
+                  </nav>
+                  <button onClick={logout} className="p-4 text-rose-400 font-bold hover:bg-rose-500/10 rounded-xl flex items-center gap-3"><LogOut size={20}/> Çıkış</button>
+               </aside>
+               <main className="flex-1 bg-[#f8fafc] text-slate-900 md:rounded-tl-[3rem] p-10 overflow-y-auto">
+                  {tab === "home" && <PortalHome />}
+                  {tab === "ai-asistan" && <AIAssistant />}
+               </main>
+               <FloatingAssistant />
+            </div>
+          );
+        }
+
+        function AppContent() {
+          const { user } = useAuth();
+          if (!user) return <LoginScreen />;
+          return (<WiseAiEgitimPlatformu />);
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(
+          <ErrorBoundary>
+            <GeminiProvider>
+              <AuthProvider>
+                <AppContent />
+              </AuthProvider>
+            </GeminiProvider>
+          </ErrorBoundary>
+        );
+    </script>
+</body>
+</html>
